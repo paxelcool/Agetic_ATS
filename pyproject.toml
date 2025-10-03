@@ -1,0 +1,67 @@
+[tool.poetry]
+name = "agetic-ats"
+version = "0.1.0"
+description = "Automated Trading System with AI agents"
+authors = ["Agetic ATS Team <contact@agetic.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+
+# MetaTrader5 для синхронизации с торговым терминалом
+MetaTrader5 = "*"
+
+# Core LangChain ecosystem (локальные модели через Ollama)
+langchain = "*"
+langchain-ollama = "*"  # Вместо langchain-openai для локальных моделей
+langgraph = "*"
+
+# Data validation and settings
+pydantic = "*"
+pydantic-settings = "*"
+
+# Vector database для семантического поиска (устанавливается через pip)
+chromadb = "*"
+
+# Graph database для анализа связей
+memgraph = "*"
+
+# Data processing для анализа рыночных данных
+pandas = "*"
+numpy = "*"
+scipy = "*"  # Для математических вычислений
+
+# Интерфейсы пользователя
+streamlit = "*"  # Для веб-панели мониторинга (опционально)
+click = "*"      # Для CLI интерфейса
+rich = "*"       # Для красивого вывода в терминале
+
+# Локальные альтернативы вместо платных сервисов:
+# - Ollama для LLM вместо OpenAI (бесплатно, локально)
+# - ChromaDB вместо векторных сервисов (бесплатно, локально)
+# - Memgraph вместо графовых сервисов (бесплатно, локально)
+
+# Async support (встроено в Python 3.12+)
+# asyncio уже включен в стандартную библиотеку
+
+[tool.poetry.group.dev.dependencies]
+pytest = "*"
+pytest-asyncio = "*"
+black = "*"
+isort = "*"
+mypy = "*"
+ruff = "*"
+
+[tool.poetry.group.test.dependencies]
+pytest = "*"
+pytest-asyncio = "*"
+pytest-cov = "*"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+# Команды для разработки
+# poetry install          # установить зависимости
+# poetry run pytest       # запуск тестов
+# poetry run black .      # форматирование кода
+# poetry run ollama serve  # запуск локальной модели

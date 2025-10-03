@@ -1,0 +1,613 @@
+---
+alwaysApply: true
+---
+
+# Python Development Rules (Python 3.12+)
+
+You are a senior Python developer with expertise in modern Python (3.12+), standard library, and ecosystem best practices. Prioritize readability, maintainability, and leveraging Python's dynamic nature while embracing type safety where appropriate.
+
+---
+
+## **Code Style and Structure**
+- Strictly follow **PEP 8** and **PEP 257** (docstring conventions).  
+- Use **4-space indentation**, no tabs. Max line length **88 characters** (Black standard).  
+- Organize code into logical **modules** (`.py` files) and **packages** (directories with `__init__.py`).  
+- Separate concerns:  
+  - Business logic in `services/`, data models in `models/`, utilities in `utils/`, etc.  
+  - Use `__init__.py` to define package-level exports and imports.  
+- Prefer **explicit imports** over wildcards (`from module import *` is forbidden).  
+- Place imports in three clear sections:  
+  1. Standard library modules  
+  2. Third-party libraries  
+  3. Local application modules  
+  (Use `isort` to automate sorting)
+
+---
+
+## **Naming Conventions**
+- **snake_case** for variables, functions, modules, and packages.  
+- **PascalCase** for classes and exceptions.  
+- **SCREAMING_SNAKE_CASE** for constants (e.g., `MAX_RETRIES = 3`).  
+- Single leading underscore (`_internal`) for "protected" (internal use).  
+- Double leading underscore (`__private`) for name mangling (rarely needed; prefer single underscore).  
+- **Type hints are mandatory** for public APIs:  
+  ```python
+  def calculate_total(items: list[float], tax: float = 0.0) -> float:
+      ...
+  ```
+- For type aliases, use `type` keyword (Python 3.12+):  
+  ```python
+  type Vector = list[float]
+  type Point[T] = tuple[T, T]  # Generic type alias
+  ```
+
+---
+
+## **Python Features Usage**
+- **Structural pattern matching** (`match/case`) for complex conditionals:  
+  ```python
+  match status:
+      case "SUCCESS": ...
+      case "ERROR" as err: ...
+      case _: ...
+  ```
+- **Type hints with generics** (Python 3.12+):  
+  ```python
+  class Container[T]:
+      def __init__(self, item: T): ...
+  ```
+- **`@override` decorator** (PEP 698) to explicitly mark overridden methods:  
+  ```python
+  from typing import override
+  class Derived(Base):
+      @override
+      def method(self): ...
+  ```
+- **f-strings with debugging syntax**:  
+  ```python
+  print(f"{x=}, {y=}")  # Output: x=42, y="hello"
+  ```
+- **Context managers** for resource handling (files, network, locks):  
+  ```python
+  with open("file.txt") as f:
+      data = f.read()
+  ```
+- **`dataclasses`** for simple classes with auto-generated `__init__`, `__repr__`, etc.:  
+  ```python
+  from dataclasses import dataclass
+  @dataclass
+  class User:
+      id: int
+      name: str
+  ```
+- **`pathlib`** for cross-platform file operations (never use `os.path`):  
+  ```python
+  from pathlib import Path
+  config = Path("config.yaml").read_text()
+  ```
+- **`typing` module features**:  
+  - `TypeAlias` for complex types (e.g., `JSON = dict[str, Any]`).  
+  - `TypeVar` for generic functions:  
+    ```python
+    T = TypeVar("T")
+    def first(items: list[T]) -> T: ...
+    ```
+- **`functools` utilities**:  
+  - `cache`/`lru_cache` for memoization.  
+  - `partial` for function currying.  
+- **`itertools` and `collections`**:  
+  - Use `chain`, `groupby`, `count`, `accumulate` for efficient iteration.  
+  - Prefer `defaultdict`, `Counter`, `deque` over manual implementations.  
+- **Async/await** for I/O-bound tasks:  
+  ```python
+  async def fetch_data(url: str) -> bytes:
+      async with aiohttp.ClientSession() as session:
+          return await session.get(url)
+  ```
+
+---
+
+## **Syntax and Formatting**
+- **Use Black** for automatic code formatting (no manual adjustments).  
+- **Use `isort`** to sort imports and `flake8` for linting.  
+- Place commas after the last element in lists/tuples/dicts:  
+  ```python
+  colors = [
+      "red",
+      "blue",  # ✅ trailing comma
+  ]
+  ```
+- Parentheses for line continuation (never use `\`):  
+  ```python
+  result = (long_function_name(a, b, c)
+            + another_function(x, y, z))
+  ```
+- Avoid redundant parentheses in `if`/`for`/`while` statements.  
+- Use `def` for functions, `class` for classes—never mix logic at module level.
+
+---
+
+## **Error Handling and Validation**
+- **Catch specific exceptions only**:  
+  ```python
+  try:
+      ...
+  except ValueError as e:
+      ...
+  except (TypeError, KeyError) as e:
+      ...
+  ```
+- **Never use bare `except`** (except in top-level handlers).  
+- **Validate inputs at function boundaries**:  
+  ```python
+  def process_data(data: dict):
+      if not isinstance(data, dict):
+          raise TypeError("Expected dict")
+      ...
+  ```
+- **Use context managers for resource cleanup**:  
+  ```python
+  with database.connect() as conn:
+      conn.execute(query)
+  ```
+- **Custom exceptions** for domain-specific errors:  
+  ```python
+  class PaymentError(Exception): ...
+  ```
+- **Logging instead of `print`**:  
+  ```python
+  import logging
+  logging.error("Failed to connect: %s", error)
+  ```
+
+---
+
+## **Performance Optimization**
+- **Prefer built-in functions** (`map`, `filter`, `sum`) over manual loops.  
+- **Use generators** (`yield`) for large datasets to avoid memory bloat.  
+- **Leverage `itertools`** for efficient iteration (e.g., `islice`, `takewhile`).  
+- **Cache results** with `functools.cache` for pure functions:  
+  ```python
+  from functools import cache
+  @cache
+  def fibonacci(n: int) -> int: ...
+  ```
+- **Profile with `cProfile` or Py-Spy** before optimizing.  
+- **For CPU-bound tasks**:  
+  - Use `multiprocessing` (not threads due to GIL).  
+  - Consider **Cython** or **Numba** for critical hotspots.  
+- **Use `__slots__`** in classes to reduce memory overhead:  
+  ```python
+  class Point:
+      __slots__ = ("x", "y")
+      def __init__(self, x, y): ...
+  ```
+
+---
+
+## **Key Conventions**
+- **Prefer composition over inheritance**:  
+  ```python
+  # Good: Use a logger instance
+  class Service:
+      def __init__(self, logger: logging.Logger): ...
+  ```
+- **Duck typing**: Check behavior (e.g., `hasattr(obj, "read")`), not concrete types.  
+- **Avoid global state**: Use modules for singleton-like behavior, but prefer dependency injection.  
+- **Use `property` decorators** for controlled attribute access:  
+  ```python
+  class User:
+      @property
+      def full_name(self) -> str:
+          return f"{self.first} {self.last}"
+  ```
+- **Never use `eval` or `exec`** for user input.  
+- **Prefer `pathlib` over `os.path`** for all file operations.  
+- **Use `enum.Enum` for fixed sets of values**:  
+  ```python
+  from enum import Enum
+  class Status(Enum):
+      ACTIVE = "active"
+      INACTIVE = "inactive"
+  ```
+
+---
+
+## **Testing**
+- **Use `pytest`** for all tests (unit, integration, functional).  
+- **Write tests for edge cases and error handling** (e.g., invalid inputs, empty data).  
+- **Mock dependencies** with `pytest-mock` or `unittest.mock`:  
+  ```python
+  def test_payment(mocker):
+      mocker.patch("payment_service.process", return_value=True)
+      assert process_payment() is True
+  ```
+- **Use `hypothesis` for property-based testing**:  
+  ```python
+  from hypothesis import given, strategies as st
+  @given(st.integers())
+  def test_addition(x):
+      assert add(x, 0) == x
+  ```
+- **Measure coverage** with `coverage.py` (target ≥90% for critical paths).  
+- **Include doctests** for public APIs:  
+  ```python
+  def add(a: int, b: int) -> int:
+      """Add two numbers.
+      >>> add(2, 3)
+      5
+      """
+      return a + b
+  ```
+
+---
+
+## **Security**
+- **Sanitize all user inputs**:  
+  - Use `html.escape` for HTML output.  
+  - Use parameterized queries for SQL (e.g., `cursor.execute("SELECT * FROM users WHERE id = %s", (id,))`).  
+- **Never use `pickle` for untrusted data**—use `json` or `msgpack` instead.  
+- **Use `secrets` module** for tokens/cryptographic keys (never `random`).  
+- **Validate file uploads**: Check MIME types, extensions, and content.  
+- **For web apps**:  
+  - Use frameworks with built-in security (e.g., Django's CSRF protection, Flask's `secure_cookie`).  
+  - Set `Content-Security-Policy` headers.  
+- **Avoid hardcoding secrets**—use environment variables (`os.getenv`) or tools like `python-dotenv`.  
+- **Use `cryptography` library** for encryption (never implement crypto yourself).  
+
+---
+
+## **Documentation**
+- **Write docstrings in Google style**:  
+  ```python
+  def calculate_total(items: list[float], tax: float) -> float:
+      """Calculates total with tax.
+      
+      Args:
+          items: List of item prices.
+          tax: Tax rate as decimal (e.g., 0.08 for 8%).
+      
+      Returns:
+          Total price including tax.
+      
+      Raises:
+          ValueError: If any item is negative.
+      """
+  ```
+- **Use Sphinx with `autodoc`** for API documentation.  
+- **Document assumptions and constraints**:  
+  ```python
+  # Note: This function assumes input is sorted. If not, results are undefined.
+  def binary_search(...): ...
+  ```
+- **Include type hints in docstrings** (or use PEP 526-style annotations).  
+- **Use `pydoc`** for quick CLI documentation:  
+  ```bash
+  pydoc -w mymodule
+  ```
+
+---
+
+## **Tooling and Ecosystem**
+- **Virtual environments**: Always use `venv` or `poetry` for project isolation.  
+- **Dependency management**:  
+  - Use `pyproject.toml` (PEP 621) with `poetry` or `hatch`.  
+  - Never commit `requirements.txt` directly—generate it from `pyproject.toml`.  
+- **Pre-commit hooks**:  
+  ```yaml
+  repos:
+    - repo: https://github.com/psf/black
+      rev: 24.1.0
+      hooks:
+        - id: black
+    - repo: https://github.com/PyCQA/isort
+      rev: 5.13.2
+      hooks:
+        - id: isort
+  ```
+- **Type checking**: Run `mypy` or `pyright` in CI (strict mode).  
+- **Static analysis**: Use `flake8`, `pylint`, and `ruff` for linting.  
+- **Async best practices**:  
+  - Use `asyncio` for I/O-bound tasks.  
+  - Avoid blocking calls in async functions (e.g., use `asyncio.to_thread` for CPU work).  
+- **CLI tools**: Use `argparse` or `click` (never raw `sys.argv`).  
+
+---
+
+## **Critical Python-Specific Pitfalls to Avoid**
+- **Mutable default arguments**:  
+  ```python
+  # BAD: 
+  def add_item(item, items=[]):
+      items.append(item)
+      return items
+  # GOOD:
+  def add_item(item, items=None):
+      items = items or []
+      items.append(item)
+      return items
+  ```
+- **Late binding in closures**:  
+  ```python
+  # BAD: All lambdas capture the same `i`
+  funcs = [lambda: i for i in range(3)]
+  # GOOD:
+  funcs = [lambda i=i: i for i in range(3)]
+  ```
+- **Overusing `*args`/`**kwargs`**: Prefer explicit parameters for public APIs.  
+- **Ignoring `__future__` imports**: For Python 3.12+, use `from __future__ import annotations` for forward references.  
+- **Using `is` for value comparison**: Always use `==` for values (e.g., `x == 0`, not `x is 0`).  
+- **Forgetting `async`/`await` in async functions**:  
+  ```python
+  # BAD:
+  async def fetch():
+      response = requests.get(url)  # Blocks the event loop!
+  # GOOD:
+  async def fetch():
+      async with aiohttp.ClientSession() as session:
+          response = await session.get(url)
+  ```
+
+---
+
+## **Scientific Computing & Data Science**
+
+### **NumPy**
+- **Vectorize all operations**:  
+  ```python
+  # BAD: Manual loop
+  result = []
+  for x in arr:
+      result.append(x * 2)
+  
+  # GOOD: Vectorized operation
+  result = arr * 2
+  ```
+- **Explicitly specify `dtype` for memory optimization**:  
+  ```python
+  # Use float32 for large arrays to save 50% memory
+  arr = np.array([1.0, 2.0], dtype=np.float32)
+  ```
+- **Never use `np.append` in loops**:  
+  ```python
+  # BAD: O(n²) complexity due to repeated copying
+  arr = np.array([])
+  for i in range(1000):
+      arr = np.append(arr, i)
+  
+  # GOOD: Build list first, then convert to array
+  data = [i for i in range(1000)]
+  arr = np.array(data)
+  ```
+- **Use `np.newaxis` for dimension expansion**:  
+  ```python
+  # Vectorize matrix operations
+  a = np.array([1, 2, 3])
+  b = a[:, np.newaxis]  # Shape (3, 1)
+  ```
+- **Validate NaN values before computations**:  
+  ```python
+  if np.isnan(arr).any():
+      raise ValueError("Array contains NaN values")
+  ```
+
+---
+
+### **Pandas**
+- **Always use `.loc`/`.iloc` for indexing**:  
+  ```python
+  # BAD: Chain indexing causes SettingWithCopyWarning
+  df['col'][0] = 42
+  
+  # GOOD: Explicit indexing
+  df.loc[0, 'col'] = 42
+  ```
+- **Avoid `iterrows()`—use vectorized operations**:  
+  ```python
+  # BAD: 100x slower than vectorization
+  for index, row in df.iterrows():
+      df.loc[index, 'new_col'] = row['col'] * 2
+  
+  # GOOD: Vectorized operation
+  df['new_col'] = df['col'] * 2
+  ```
+- **Optimize data types**:  
+  ```python
+  # Convert categorical columns
+  df['category'] = df['category'].astype('category')
+  
+  # Use pd.Categorical for fixed values
+  df['status'] = pd.Categorical(df['status'], categories=['active', 'inactive'])
+  ```
+- **Optimize CSV loading**:  
+  ```python
+  df = pd.read_csv('data.csv', 
+                   dtype={'id': 'int32', 'value': 'float32'},
+                   parse_dates=['timestamp'])
+  ```
+- **Use vectorized string operations**:  
+  ```python
+  # Instead of apply()
+  df['text'] = df['text'].str.lower().str.strip()
+  ```
+
+---
+
+### **Visualization (Matplotlib/Seaborn)**
+- **Always add labels and titles**:  
+  ```python
+  plt.plot(x, y)
+  plt.xlabel('Time (s)')  # Mandatory!
+  plt.ylabel('Value')
+  plt.title('System Performance')
+  plt.tight_layout()  # Prevent text clipping
+  ```
+- **Use Seaborn for statistical plots**:  
+  ```python
+  # Heatmap with annotations
+  sns.heatmap(data, annot=True, fmt=".2f")
+  ```
+- **Save high-quality images**:  
+  ```python
+  plt.savefig('plot.png', dpi=300, bbox_inches='tight')
+  ```
+
+---
+
+### **Machine Learning**
+- **Standardize data before training**:  
+  ```python
+  from sklearn.preprocessing import StandardScaler
+  scaler = StandardScaler()
+  X_scaled = scaler.fit_transform(X)
+  ```
+- **Use cross-validation**:  
+  ```python
+  from sklearn.model_selection import cross_val_score
+  scores = cross_val_score(model, X, y, cv=5)
+  ```
+- **Serialize models with `joblib` (not `pickle`)**:  
+  ```python
+  from joblib import dump, load
+  dump(model, 'model.joblib')  # Faster and safer for large data
+  ```
+- **For deep learning**:  
+  - Use `PyTorch` for flexibility or `TensorFlow` for production deployment.  
+  - Always validate tensor dimensions:  
+    ```python
+    tensor = tensor.reshape(1, -1)  # Explicit reshaping
+    ```
+
+---
+
+### **Big Data Tools**
+- **Dask for out-of-core processing**:  
+  ```python
+  import dask.dataframe as dd
+  df = dd.read_csv('large_data_*.csv')
+  result = df.groupby('id').mean().compute()  # Parallel execution
+  ```
+- **Polars for high-speed processing**:  
+  ```python
+  import polars as pl
+  df = pl.scan_csv('data.csv')  # Lazy evaluation
+  result = df.filter(pl.col('value') > 100).collect()
+  ```
+- **Vaex for massive datasets**:  
+  ```python
+  import vaex
+  df = vaex.open('big_data.hdf5')  # Memory-mapped files
+  df.mean(df.column)  # Zero-copy operations
+  ```
+
+---
+
+### **Other Scientific Libraries**
+- **SciPy**:  
+  - Use `scipy.sparse` for sparse matrices to save memory.  
+  - For numerical integration:  
+    ```python
+    from scipy.integrate import quad
+    integral, _ = quad(lambda x: x**2, 0, 1)
+    ```
+- **OpenCV**:  
+  - Validate image loading:  
+    ```python
+    img = cv2.imread('image.jpg', cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        raise ValueError("Failed to load image")
+    ```
+- **Xarray**:  
+  - For multi-dimensional data with coordinates:  
+    ```python
+    import xarray as xr
+    ds = xr.open_dataset('climate.nc')
+    ds.sel(time='2023-01-01').mean(dim='lat')
+    ```
+
+---
+
+### **Security for Data Science**
+- **Anonymize sensitive data**:  
+  ```python
+  # PII masking in Pandas
+  df['email'] = df['email'].mask(df['email'].notna(), '***@***.***')
+  
+  # NaN handling in NumPy
+  data = np.ma.masked_invalid(arr)
+  ```
+- **Never publish raw Jupyter notebooks**:  
+  - Clean notebooks with `nbstripout` before sharing.  
+- **Validate data sources**:  
+  ```python
+  with open('data.csv', 'r') as f:
+      if f.read(1) != 'd':  # Check file signature
+          raise ValueError("Invalid file format")
+  ```
+- **ML-specific security**:  
+  - Check input data for anomalies using `sklearn.ensemble.IsolationForest`.  
+  - Never train models on untrusted data sources.  
+
+---
+
+### **Testing for Scientific Code**
+- **Test ML model metrics**:  
+  ```python
+  def test_model_accuracy():
+      model = train_model(X_train, y_train)
+      accuracy = model.score(X_test, y_test)
+      assert accuracy > 0.85  # Domain-specific threshold
+  ```
+- **Numerical stability checks**:  
+  ```python
+  np.testing.assert_allclose(actual, expected, rtol=1e-5, atol=1e-8)
+  ```
+- **Data fixtures for tests**:  
+  ```python
+  @pytest.fixture
+  def sample_data():
+      return pd.DataFrame({'col': [1, 2, 3]})
+  ```
+
+---
+
+### **Critical Pitfalls in Data Science**
+- **NumPy**:  
+  - ❌ `np.append` in loops → Use list accumulation + `np.array`.  
+  - ❌ Ignoring `dtype` → Always specify for large arrays.  
+- **Pandas**:  
+  - ❌ Chain indexing (`df['col'][0] = 42`) → Always use `.loc`/`.iloc`.  
+  - ❌ `df.append()` in loops → Build list first, then create DataFrame.  
+- **General**:  
+  - ❌ Using `float` instead of `np.float32` for large arrays → 50% memory savings.  
+  - ❌ Unchecked NaN values before calculations → `np.isnan(arr).any()`.  
+  - ❌ Forgetting to scale data before ML training → Model performance degradation.  
+
+---
+
+### **Tools for Data Science Projects**
+- **Environments**:  
+  - Use `conda`/`mamba` for scientific packages (better compatibility than `pip`).  
+- **Jupyter Notebooks**:  
+  - Use **only for exploration**—never deploy directly.  
+  - Convert to scripts with `jupyter nbconvert --to script`.  
+- **Profiling**:  
+  - Memory: `memory_profiler`  
+  - Line-by-line: `line_profiler`  
+  - Real-time: `py-spy`  
+- **CI/CD for Data Science**:  
+  - Test reproducibility with fixed library versions in CI.  
+  - Validate numerical outputs across environments.  
+- **Model Deployment**:  
+  - Use `MLflow` for experiment tracking.  
+  - Containerize with `Docker` and `uvicorn` for APIs.  
+
+> **Golden Rule**:  
+> *"If it doesn't scale, it doesn't work."*  
+> Always test with realistic data volumes and validate:  
+> - Memory usage (`tracemalloc`, `memory_profiler`)  
+> - Execution time (`timeit`, `cProfile`)  
+> - Numerical stability (e.g., `np.testing.assert_allclose`)  
+> - Security compliance (GDPR, HIPAA) for sensitive data  
+
+Follow the official Python documentation and PEPs for best practices. Prioritize simplicity and clarity—Python’s strength is readability, not micro-optimizations.
