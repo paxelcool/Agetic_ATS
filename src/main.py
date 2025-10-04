@@ -8,17 +8,14 @@ import asyncio
 import logging
 import signal
 import sys
-from typing import List
+from typing import Callable, List, Optional
 
 import click
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from src.synchronizer.sync_service import SyncService
-
-# Создаем экземпляр сервиса синхронизации напрямую
-sync_service = SyncService()
+from src.synchronizer.sync_service import SyncService, create_sync_service
 
 # Настройка логирования
 logging.basicConfig(
@@ -38,9 +35,13 @@ class ATSCLI:
     Предоставляет команды для запуска синхронизации, мониторинга и управления системой.
     """
 
-    def __init__(self):
+    def __init__(
+        self, sync_service_factory: Callable[[], SyncService] = create_sync_service
+    ):
         """Инициализация CLI интерфейса."""
         self.shutdown_requested = False
+        self._sync_service_factory = sync_service_factory
+        self.sync_service: Optional[SyncService] = None
 
     def setup_signal_handlers(self) -> None:
         """Настраивает обработчики сигналов для корректного завершения."""
@@ -48,8 +49,8 @@ class ATSCLI:
         def signal_handler(signum, frame):
             console.print("\n[yellow]Получен сигнал завершения...[/yellow]")
             self.shutdown_requested = True
-            if sync_service:
-                sync_service.stop_sync()
+            if self.sync_service:
+                self.sync_service.stop_sync()
 
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
@@ -64,14 +65,16 @@ class ATSCLI:
         try:
             console.print("[bold blue]Инициализация ATS...[/bold blue]")
 
-            # Сервис синхронизации уже создан выше
+            # Ленивая инициализация сервиса синхронизации
+            if not self.sync_service:
+                self.sync_service = self._sync_service_factory()
 
-            if not await sync_service.initialize():
+            if not await self.sync_service.initialize():
                 console.print("[bold red][ERR] Ошибка инициализации системы[/bold red]")
                 return False
 
             # Проверяем здоровье системы
-            health = await sync_service.check_system_health()
+            health = await self.sync_service.check_system_health()
 
             if health["status"] == "healthy":
                 console.print("[bold green]Система готова к работе[/bold green]")
@@ -121,7 +124,7 @@ class ATSCLI:
             continuous: Флаг непрерывной синхронизации
             interval: Интервал синхронизации в секундах
         """
-        if not sync_service:
+        if not self.sync_service:
             console.print(
                 "[bold red][ERR] Сервис синхронизации не инициализирован[/bold red]"
             )
@@ -137,16 +140,16 @@ class ATSCLI:
             )
 
             # Запускаем непрерывную синхронизацию
-            await sync_service.start_continuous_sync(symbols, interval)
+            await self.sync_service.start_continuous_sync(symbols, interval)
 
             # Ожидаем завершения
-            while not self.shutdown_requested and sync_service.is_running:
+            while not self.shutdown_requested and self.sync_service.is_running:
                 await asyncio.sleep(1)
 
         else:
             # Однократная синхронизация
-            quotes_result = await sync_service.sync_quotes(symbols)
-            trades_result = await sync_service.sync_trades()
+            quotes_result = await self.sync_service.sync_quotes(symbols)
+            trades_result = await self.sync_service.sync_trades()
 
             # Отображаем результаты
             self._display_sync_results(quotes_result, trades_result)
@@ -190,13 +193,13 @@ class ATSCLI:
         """
         Отображает текущий статус системы.
         """
-        if not sync_service:
+        if not self.sync_service:
             console.print(
                 "[bold red][ERR] Сервис синхронизации не инициализирован[/bold red]"
             )
             return
 
-        status = await sync_service.get_sync_status()
+        status = await self.sync_service.get_sync_status()
 
         # Основной статус
         status_panel = Panel(
@@ -240,7 +243,7 @@ class ATSCLI:
                 elif command.lower() == "status":
                     await self.show_status_command()
                 elif command.lower() == "health":
-                    health = await sync_service.check_system_health()
+                    health = await self.sync_service.check_system_health()
                     self._display_system_status(health)
                 elif command.startswith("sync"):
                     await self._parse_sync_command(command)
@@ -288,8 +291,8 @@ class ATSCLI:
 
     async def cleanup(self) -> None:
         """Очищает ресурсы перед завершением."""
-        if sync_service:
-            await sync_service.close()
+        if self.sync_service:
+            await self.sync_service.close()
 
 
 @click.group()
