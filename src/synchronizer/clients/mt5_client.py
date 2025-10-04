@@ -5,6 +5,7 @@ MT5 клиент для получения рыночных данных.
 """
 
 import logging
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 try:
