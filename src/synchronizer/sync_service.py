@@ -11,16 +11,23 @@
 """
 
 import asyncio
+import importlib
 import logging
 import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
+try:
+    import MetaTrader5 as mt5
+except ImportError:  # pragma: no cover - среда может не содержать MetaTrader5
+    mt5 = None
+
 from src.config import settings
-from src.database.vector_store import initialize_vector_store
-from src.database.graph_store import initialize_graph_store
+graph_store_module = importlib.import_module("src.database.graph_store")
+storage_module = importlib.import_module("src.database.storage")
+vector_store_module = importlib.import_module("src.database.vector_store")
 from src.database.init_db import create_database_manager
-from src.database.storage import initialize_storages
+from src.database.models import Quote, Trade
 
 # Импортируем компоненты синхронизации
 from .clients.mt5_client import MT5Client
@@ -63,26 +70,32 @@ class SyncService:
         try:
             # SQLite
             if self.db_manager.initialize_database():
-                initialize_storages(self.db_manager)
+                storage_module.initialize_storages(self.db_manager)
                 logger.info("SQLite хранилище инициализировано")
             else:
                 logger.error("Не удалось инициализировать SQLite хранилище")
 
             # ChromaDB
-            initialize_vector_store(settings.chromadb_persist_dir)
-            from storage.chromadb.vector_store import vector_store
+            vector_store_module.initialize_vector_store(settings.chromadb_persist_dir)
+            vector_store = vector_store_module.vector_store
             if vector_store and vector_store.initialize_collections():
                 logger.info("ChromaDB хранилище инициализировано")
             else:
                 logger.error("Не удалось инициализировать ChromaDB хранилище")
 
             # Memgraph
-            initialize_graph_store(
+            graph_store_module.initialize_graph_store(
                 settings.memgraph_uri,
                 settings.memgraph_user,
                 settings.memgraph_password,
             )
-            logger.info("Memgraph хранилище инициализировано")
+            graph_store = graph_store_module.graph_store
+            if graph_store and graph_store.driver and graph_store.initialize_graph():
+                logger.info("Memgraph хранилище инициализировано")
+            else:
+                logger.warning(
+                    "Memgraph хранилище недоступно или не инициализировано"
+                )
 
         except Exception as e:
             logger.error(f"Ошибка инициализации хранилищ: {e}")
@@ -160,17 +173,17 @@ class SyncService:
 
             # Проверяем ChromaDB
             try:
-            from src.database.vector_store import vector_store
+                vector_store = vector_store_module.vector_store
 
-            if vector_store:
-                chroma_stats = vector_store.get_collection_stats()
-                health["components"]["chromadb"] = {
-                    "status": "ok",
-                    "collections": chroma_stats,
-                }
+                if vector_store:
+                    chroma_stats = vector_store.get_collection_stats()
+                    health["components"]["chromadb"] = {
+                        "status": "ok",
+                        "collections": chroma_stats,
+                    }
                 else:
                     health["components"]["chromadb"] = {
-                        "status": "error",
+                        "status": "unavailable",
                         "error": "Векторное хранилище не инициализировано",
                     }
             except Exception as e:
@@ -178,7 +191,7 @@ class SyncService:
 
             # Проверяем Memgraph
             try:
-                from storage.memgraph.graph_store import graph_store
+                graph_store = graph_store_module.graph_store
 
                 if graph_store and graph_store.driver:
                     health["components"]["memgraph"] = {
@@ -252,7 +265,7 @@ class SyncService:
             filtered_quotes = self.data_processor.filter_recent_quotes(filtered_quotes)
 
             # Сохраняем в SQLite
-            from src.database.storage import quote_storage
+            quote_storage = storage_module.quote_storage
 
             for quote in filtered_quotes:
                 try:
@@ -262,6 +275,9 @@ class SyncService:
 
                         # Создаем и сохраняем эмбеддинг в ChromaDB
                         await self._store_quote_embedding(quote.model_dump())
+
+                        # Сохраняем данные в графовое хранилище
+                        self._store_quote_in_graph(quote)
 
                         logger.debug(f"Котировка {quote.symbol} синхронизирована")
                     else:
@@ -309,15 +325,22 @@ class SyncService:
             processed_trades = self.data_processor.process_trades_batch(raw_trades)
 
             # Сохраняем в SQLite
-            from src.database.storage import trade_storage
+            trade_storage = storage_module.trade_storage
 
             for trade in processed_trades:
                 try:
+                    trade_id = trade.id or f"trade_{int(datetime.now().timestamp())}_{trade.symbol}"
+                    if trade.id != trade_id:
+                        trade.id = trade_id
+
                     if trade_storage and trade_storage.store_trade(trade):
                         result["synced_trades"] += 1
 
                         # Создаем и сохраняем эмбеддинг в ChromaDB
                         await self._store_trade_embedding(trade.model_dump())
+
+                        # Сохраняем данные в графовое хранилище
+                        self._store_trade_in_graph(trade)
 
                         logger.debug(f"Сделка {trade.id} синхронизирована")
                     else:
@@ -348,16 +371,31 @@ class SyncService:
         Returns:
             int: Константа MT5 для таймфрейма
         """
+        if mt5 is None:
+            fallback_map = {
+                "M1": 1,
+                "M5": 5,
+                "M15": 15,
+                "H1": 60,
+                "H4": 240,
+                "D1": 1440,
+            }
+            logger.warning(
+                "MetaTrader5 недоступен, используются резервные значения таймфреймов"
+            )
+            return fallback_map.get(timeframe, fallback_map["M1"])
+
         timeframe_map = {
-            "M1": mt5.TIMEFRAME_M1,
-            "M5": mt5.TIMEFRAME_M5,
-            "M15": mt5.TIMEFRAME_M15,
-            "H1": mt5.TIMEFRAME_H1,
-            "H4": mt5.TIMEFRAME_H4,
-            "D1": mt5.TIMEFRAME_D1,
+            "M1": getattr(mt5, "TIMEFRAME_M1"),
+            "M5": getattr(mt5, "TIMEFRAME_M5"),
+            "M15": getattr(mt5, "TIMEFRAME_M15"),
+            "H1": getattr(mt5, "TIMEFRAME_H1"),
+            "H4": getattr(mt5, "TIMEFRAME_H4"),
+            "D1": getattr(mt5, "TIMEFRAME_D1"),
         }
 
-        return timeframe_map.get(timeframe, mt5.TIMEFRAME_M1)
+        default_timeframe = getattr(mt5, "TIMEFRAME_M1")
+        return timeframe_map.get(timeframe, default_timeframe)
 
     async def _store_quote_embedding(self, quote_data: Dict[str, Any]) -> None:
         """
@@ -367,21 +405,18 @@ class SyncService:
             quote_data: Данные котировки
         """
         try:
-            from src.database.vector_store import vector_store
+            vector_store = vector_store_module.vector_store
 
             if vector_store:
                 # Создаем эмбеддинг через сервис эмбеддингов
                 embedding = self.embedding_service.create_quote_embedding(quote_data)
-
-                # Создаем текстовое представление для полнотекстового поиска
-                text = f"Quote: {quote_data['symbol']} at {quote_data['timestamp']}, bid={quote_data['bid']}, ask={quote_data['ask']}"
 
                 # Сохраняем в ChromaDB
                 vector_store.store_quote_embedding(
                     quote_data["symbol"],
                     quote_data["timestamp"],
                     embedding,
-                    quote_data
+                    quote_data,
                 )
 
         except Exception as e:
@@ -395,24 +430,95 @@ class SyncService:
             trade_data: Данные сделки
         """
         try:
-            from src.database.vector_store import vector_store
+            vector_store = vector_store_module.vector_store
 
             if vector_store:
                 # Создаем эмбеддинг через сервис эмбеддингов
                 embedding = self.embedding_service.create_trade_embedding(trade_data)
 
-                # Создаем текстовое представление для полнотекстового поиска
-                text = f"Trade: {trade_data.get('symbol', 'UNKNOWN')} {trade_data.get('side', 'UNKNOWN')} at {trade_data.get('entry_price', 0)}"
-
                 # Сохраняем в ChromaDB
                 vector_store.store_trade_embedding(
                     trade_data.get("id", f"trade_{int(time.time())}"),
                     embedding,
-                    trade_data
+                    trade_data,
                 )
 
         except Exception as e:
             logger.error(f"Ошибка сохранения эмбеддинга сделки: {e}")
+
+    def _store_quote_in_graph(self, quote: Quote) -> None:
+        """Сохраняет котировку в Memgraph, если доступен GraphStore."""
+
+        graph_store = graph_store_module.graph_store
+        if not graph_store or not graph_store.driver:
+            return
+
+        try:
+            graph_store.store_instrument(
+                quote.symbol,
+                {"last_quote_timestamp": quote.timestamp},
+            )
+            graph_store.store_quote(
+                {
+                    "id": f"quote_{quote.symbol}_{quote.timestamp}",
+                    "symbol": quote.symbol,
+                    "timestamp": quote.timestamp,
+                    "bid": quote.bid,
+                    "ask": quote.ask,
+                    "volume": quote.volume or 0,
+                }
+            )
+        except Exception as e:
+            logger.error(f"Ошибка сохранения котировки в граф: {e}")
+
+    def _store_trade_in_graph(self, trade: Trade) -> None:
+        """Сохраняет сделку в Memgraph, если доступен GraphStore."""
+
+        graph_store = graph_store_module.graph_store
+        if not graph_store or not graph_store.driver:
+            return
+
+        try:
+            opened_at_dt = (
+                trade.opened_at if isinstance(trade.opened_at, datetime) else None
+            )
+            last_trade_ts = (
+                int(opened_at_dt.timestamp()) if opened_at_dt else int(time.time())
+            )
+
+            graph_store.store_instrument(
+                trade.symbol,
+                {"last_trade_timestamp": last_trade_ts},
+            )
+
+            trade_data = {
+                "id": trade.id
+                or f"trade_{int(datetime.now().timestamp())}_{trade.symbol}",
+                "symbol": trade.symbol,
+                "side": getattr(trade.side, "value", trade.side),
+                "entry_price": trade.entry_price,
+                "quantity": trade.quantity,
+                "status": trade.status,
+                "pnl": trade.pnl if trade.pnl is not None else 0.0,
+                "opened_at": (
+                    opened_at_dt.isoformat()
+                    if opened_at_dt
+                    else (
+                        trade.opened_at
+                        if isinstance(trade.opened_at, str)
+                        else datetime.utcnow().isoformat()
+                    )
+                ),
+            }
+
+            graph_store.store_trade(trade_data)
+
+            if getattr(trade, "signal_id", None):
+                graph_store.create_trade_signal_relationship(
+                    trade_data["id"], trade.signal_id
+                )
+        except Exception as e:
+            logger.error(f"Ошибка сохранения сделки в граф: {e}")
 
     async def start_continuous_sync(
         self, symbols: List[str], interval: int = 60
@@ -510,7 +616,7 @@ class SyncService:
 
         # Закрываем графовое хранилище
         try:
-            from storage.memgraph.graph_store import graph_store
+            graph_store = graph_store_module.graph_store
 
             if graph_store:
                 graph_store.close()
