@@ -101,20 +101,20 @@
 ## Этап 4: Разработка инструментов и агентов
 Цель: Создать инструменты для анализа данных и базовых агентов (на основе `ProjectOwerview.md`).
 
-- [ ] **Задача 4.1: Реализация инструментов анализа**
-  - [ ] Создать `atl/tools/features.py` с функциями: EMA, ATR, RVOL, Donchian (на основе кода из `ProjectOwerview.md`).
-  - [ ] Добавить `atl/tools/risk.py` для расчета позиций (риск на сделку, стопы).
-  - [ ] Реализовать `atl/tools/execution.py` для интеграции с синхронизатором.
+- [x] **Задача 4.1: Реализация инструментов анализа**
+  - [x] Создать `atl/tools/features.py` с функциями: EMA, ATR, RVOL, Donchian (на основе кода из `ProjectOwerview.md`).
+  - [x] Добавить `atl/tools/risk.py` для расчета позиций (риск на сделку, стопы).
+  - [x] Реализовать `atl/tools/execution.py` для интеграции с синхронизатором.
 
-- [ ] **Задача 4.2: Создание базовых агентов**
-  - [ ] Реализовать `atl/agents/signal_agent_a.py` (Intraday) с ReAct-промптами (из `ProjectOwerview.md`).
-  - [ ] Добавить `atl/agents/signal_agent_b.py` (Swing/Trend) с Donchian/MA-таймингом.
-  - [ ] Создать `atl/agents/risk_agent.py` и `atl/agents/exec_agent.py` для управления рисками и исполнения.
+- [x] **Задача 4.2: Создание базовых агентов**
+  - [x] Реализовать `atl/agents/signal_agent_a.py` (Intraday) с ReAct-промптами (из `ProjectOwerview.md`).
+  - [x] Добавить `atl/agents/signal_agent_b.py` (Swing/Trend) с Donchian/MA-таймингом.
+  - [x] Создать `atl/agents/risk_agent.py` и `atl/agents/exec_agent.py` для управления рисками и исполнения.
 
-- [ ] **Задача 4.3: Интеграция с моделями (Ollama)**
-  - [ ] Настроить `ChatOllama` с `gpt-oss:120b-cloud` для агентов.
-  - [ ] Добавить структурированные выходы (Pydantic) для JSON-ответов.
-  - [ ] Обеспечить fallback на альтернативы (например, `deepseek-v3.1:671b-cloud`).
+- [x] **Задача 4.3: Интеграция с моделями (Ollama)**
+  - [x] Настроить `ChatOllama` с `gpt-oss:120b-cloud` для агентов.
+  - [x] Добавить структурированные выходы (Pydantic) для JSON-ответов.
+  - [x] Обеспечить fallback на альтернативы (например, `deepseek-v3.1:671b-cloud`).
 
 - [ ] **Тестирование Этапа 4**
   - [ ] Написать unit-тесты для инструментов (расчет индикаторов) в `tests/unit/test_tools.py`.
