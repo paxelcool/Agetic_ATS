@@ -6,8 +6,9 @@
 
 import json
 import logging
+import uuid
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from src.database.models import (
     MarketRegime,
@@ -184,6 +185,9 @@ class TradeStorage:
         """
         try:
             with self.db_manager.get_connection() as conn:
+                trade_id = trade.id or f"trade_{uuid.uuid4().hex}_{trade.symbol}"
+                side_value = trade.side if isinstance(trade.side, str) else trade.side.value
+
                 conn.execute(
                     """
                     INSERT OR REPLACE INTO trades
@@ -193,10 +197,9 @@ class TradeStorage:
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
                 """,
                     (
-                        trade.id
-                        or f"trade_{int(datetime.now().timestamp())}_{trade.symbol}",
+                        trade_id,
                         trade.symbol,
-                        str(trade.side),
+                        side_value,
                         trade.entry_price,
                         trade.quantity,
                         trade.stop_loss,
@@ -325,6 +328,28 @@ class SignalStorage:
         """
         try:
             with self.db_manager.get_connection() as conn:
+                signal_id = signal.id or f"signal_{uuid.uuid4().hex}_{signal.symbol}"
+                timeframe_value = (
+                    signal.timeframe
+                    if isinstance(signal.timeframe, str)
+                    else signal.timeframe.value
+                )
+                action_value = (
+                    signal.action
+                    if isinstance(signal.action, str)
+                    else signal.action.value
+                )
+                side_value = (
+                    signal.side
+                    if isinstance(signal.side, str)
+                    else signal.side.value if signal.side else None
+                )
+                regime_value = (
+                    signal.market_regime
+                    if isinstance(signal.market_regime, str)
+                    else signal.market_regime.value if signal.market_regime else None
+                )
+
                 conn.execute(
                     """
                     INSERT OR REPLACE INTO signals
@@ -334,12 +359,11 @@ class SignalStorage:
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                     (
-                        signal.id
-                        or f"signal_{int(datetime.now().timestamp())}_{signal.symbol}",
+                        signal_id,
                         signal.symbol,
-                        str(signal.timeframe),
-                        str(signal.action),
-                        signal.side.value if signal.side else None,
+                        timeframe_value,
+                        action_value,
+                        side_value,
                         signal.confidence,
                         signal.entry_price,
                         signal.stop_loss,
@@ -348,7 +372,7 @@ class SignalStorage:
                         signal.risk_amount,
                         signal.reason,
                         json.dumps(signal.indicators) if signal.indicators else None,
-                        signal.market_regime.value if signal.market_regime else None,
+                        regime_value,
                         (
                             json.dumps(signal.related_signals)
                             if signal.related_signals
